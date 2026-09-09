@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Serial Scanner</title>
+<link rel="icon" href="data:,">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Serial Scanner">
+<meta name="theme-color" content="#14171c">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: #14171c;
+    color: #e8ebef;
+    font: 16px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif;
+  }
+  body {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  #app { max-width: 560px; margin: 0 auto; padding: 16px; }
+
+  h1 { font-size: 17px; margin: 4px 0 14px; font-weight: 600; letter-spacing: -0.01em; }
+
+  button {
+    font: inherit;
+    font-weight: 600;
+    border: 0;
+    border-radius: 12px;
+    padding: 16px 20px;
+    width: 100%;
+    background: #5b8cff;
+    color: #0b0e13;
+    cursor: pointer;
+  }
+  button.secondary { background: #262c35; color: #e8ebef; }
+  button:active { transform: scale(0.99); }
+  button:disabled { opacity: 0.6; }
+
+  /* ---------------------------------------------------------- camera */
+
+  #stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #0b0e13;
+    border-radius: 16px;
+    overflow: hidden;
+    display: none;
+    margin-bottom: 14px;
+  }
+  #stage.on { display: block; }
+  #video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  #reticle {
+    position: absolute;
+    inset: 14%;
+    border: 3px solid rgba(255, 255, 255, 0.85);
+    border-radius: 14px;
+    box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+  }
+  #stage.hit #reticle { border-color: #5fce93; }
+
+  #flash {
+    position: absolute;
+    inset: 0;
+    background: #5fce93;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #flash.go { animation: pop 0.35s ease-out; }
+  @keyframes pop { 0% { opacity: 0.55; } 100% { opacity: 0; } }
+
+  /* ---------------------------------------------------------- result */
+
+  #result { display: none; margin-top: 14px; }
+  #result.on { display: block; }
+
+  .card {
+    background: #1c2027;
+    border: 1px solid #2e343d;
+    border-radius: 16px;
+    padding: 20px 18px;
+    text-align: center;
+  }
+  .cap { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #98a2b3; }
+  #serial {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 8px 0 4px;
+    word-break: break-all;
+    user-select: all;
+    -webkit-user-select: all;
+  }
+  #copyState { font-size: 14px; min-height: 22px; color: #5fce93; font-weight: 600; }
+  #copyState.warn { color: #f0a35e; }
+  #raw { font-size: 12px; color: #6b7480; word-break: break-all; margin-top: 6px; }
+
+  .row { display: flex; gap: 10px; margin-top: 12px; }
+
+  /* ---------------------------------------------------------- history */
+
+  #history { margin-top: 22px; }
+  #history h2 {
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #98a2b3; margin: 0 0 8px;
+  }
+  #list { list-style: none; margin: 0; padding: 0; }
+  #list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid #2e343d;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  #list li span { color: #6b7480; font-size: 12px; }
+
+  #msg {
+    margin-top: 14px; padding: 14px 16px; border-radius: 12px;
+    background: #2a2119; color: #f0a35e; font-size: 14px; display: none;
+  }
+  #msg.on { display: block; }
+  #msg code { background: #14171c; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <h1>Serial Scanner</h1>
+
+  <div id="stage">
+    <video id="video" playsinline muted autoplay></video>
+    <div id="reticle"></div>
+    <div id="flash"></div>
+  </div>
+
+  <button id="startBtn">Start camera</button>
+
+  <div id="result">
+    <div class="card">
+      <div class="cap">Serial number</div>
+      <div id="serial">&nbsp;</div>
+      <div id="copyState"></div>
+      <div id="raw"></div>
+    </div>
+    <div class="row">
+      <button id="copyBtn">Copy</button>
+      <button id="againBtn" class="secondary">Scan another</button>
+    </div>
+  </div>
+
+  <div id="msg"></div>
+
+  <div id="history" hidden>
+    <h2>This session</h2>
+    <ul id="list"></ul>
+  </div>
+</div>
+
+<script src="vendor/jsQR.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var video    = document.getElementById('video');
+  var stage    = document.getElementById('stage');
+  var flash    = document.getElementById('flash');
+  var startBtn = document.getElementById('startBtn');
+  var result   = document.getElementById('result');
+  var serialEl = document.getElementById('serial');
+  var copyBtn  = document.getElementById('copyBtn');
+  var againBtn = document.getElementById('againBtn');
+  var stateEl  = document.getElementById('copyState');
+  var rawEl    = document.getElementById('raw');
+  var msg      = document.getElementById('msg');
+  var history  = document.getElementById('history');
+  var list     = document.getElementById('list');
+
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+  var stream = null, scanning = false, current = '', audio = null;
+
+  // After "Scan another" the previous code is usually still filling the frame, and it
+  // would be picked up again before you can move the phone. Ignore that one code for a
+  // moment; any different code still registers instantly.
+  var lastData = '', suppressUntil = 0;
+
+  function say(html) {
+    msg.innerHTML = html;
+    msg.className = html ? 'on' : '';
+  }
+
+  /* ------------------------------------------------------------ serial */
+
+  // The QR holds the whole landing URL, e.g. https://.../Portfolio/?sn=0007-K7M2 —
+  // pull just the serial out. A code holding a bare serial works too.
+  function extractSerial(text) {
+    try {
+      var sn = new URL(text).searchParams.get('sn');
+      if (sn) return sn;
+    } catch (err) { /* not a URL */ }
+    var m = /[?&]sn=([^&#\s]+)/.exec(text);
+    if (m) {
+      try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+    }
+    return text.trim();
+  }
+
+  /* ------------------------------------------------------------ clipboard */
+
+  function copyText(text) {
+    if (!text) return Promise.resolve(false);
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(
+        function () { return true; },
+        function () { return legacyCopy(text); }
+      );
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+
+  // Older iOS ignores textarea.select(); it needs a contentEditable node and a Range.
+  function legacyCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.contentEditable = 'true';
+      ta.readOnly = false;
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+      document.body.appendChild(ta);
+      var range = document.createRange();
+      range.selectNodeContents(ta);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      ta.setSelectionRange(0, 999999);
+      var ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function showCopied(ok) {
+    stateEl.textContent = ok ? 'Copied to clipboard' : 'Tap Copy to put it on the clipboard';
+    stateEl.className = ok ? '' : 'warn';
+  }
+
+  /* ------------------------------------------------------------ feedback */
+
+  function beep() {
+    try {
+      if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = audio.createOscillator();
+      var gain = audio.createGain();
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.12, audio.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.18);
+      osc.connect(gain).connect(audio.destination);
+      osc.start();
+      osc.stop(audio.currentTime + 0.18);
+    } catch (err) { /* sound is a nicety, never a failure */ }
+  }
+
+  /* ------------------------------------------------------------ camera */
+
+  function start() {
+    if (!window.isSecureContext) {
+      say('The camera needs a secure page. Open this over <code>https://</code> &mdash; ' +
+          'a plain <code>http://</code> address will not work. See the README.');
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      say('This browser will not give a web page camera access.');
+      return;
+    }
+
+    startBtn.disabled = true;
+    startBtn.textContent = 'Starting…';
+    say('');
+
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false
+    }).then(function (s) {
+      stream = s;
+      video.srcObject = s;
+      return video.play();
+    }).then(function () {
+      stage.classList.add('on');
+      startBtn.style.display = 'none';
+      // The tap that got us here also unlocks audio on iOS.
+      if (audio && audio.state === 'suspended') audio.resume();
+      scanning = true;
+      requestAnimationFrame(tick);
+    }).catch(function (err) {
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start camera';
+      var name = err && err.name;
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        say('Camera access was blocked. On iPhone: Settings &#9656; Apps &#9656; Safari ' +
+            '&#9656; Camera &#9656; Allow, then reload this page.');
+      } else if (name === 'NotFoundError') {
+        say('No camera found on this device.');
+      } else {
+        say('Could not start the camera: ' + (name || err));
+      }
+    });
+  }
+
+  function tick() {
+    if (!scanning) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      // Downscale before decoding. The sensor gives far more pixels than jsQR needs, and
+      // decoding them all would drop the frame rate to a crawl on a phone.
+      var w = video.videoWidth, h = video.videoHeight;
+      var scale = Math.min(1, 640 / Math.max(w, h));
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+      if (code && code.data && !(code.data === lastData && Date.now() < suppressUntil)) {
+        onFound(code.data);
+        return;
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function onFound(text) {
+    scanning = false;
+    lastData = text;
+    video.pause();
+    stage.classList.add('hit');
+    flash.classList.remove('go');
+    void flash.offsetWidth;          // restart the animation
+    flash.classList.add('go');
+    beep();
+
+    current = extractSerial(text);
+    serialEl.textContent = current;
+    rawEl.textContent = (current === text.trim()) ? '' : text;
+    stateEl.textContent = '';
+    result.classList.add('on');
+    addToHistory(current);
+
+    // Safari only allows a clipboard write during a user gesture, and a camera frame is
+    // not one, so this often fails on iPhone. The Copy button below always works.
+    copyText(current).then(showCopied);
+  }
+
+  function addToHistory(serial) {
+    history.hidden = false;
+    var when = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    var li = document.createElement('li');
+    li.appendChild(document.createTextNode(serial));
+    var time = document.createElement('span');
+    time.textContent = when;
+    li.appendChild(time);
+    li.addEventListener('click', function () {
+      copyText(serial).then(function (ok) {
+        time.textContent = ok ? 'copied' : when;
+        setTimeout(function () { time.textContent = when; }, 1200);
+      });
+    });
+    list.insertBefore(li, list.firstChild);
+  }
+
+  function again() {
+    result.classList.remove('on');
+    stage.classList.remove('hit');
+    stateEl.textContent = '';
+    suppressUntil = Date.now() + 2500;
+    video.play();
+    scanning = true;
+    requestAnimationFrame(tick);
+  }
+
+  startBtn.addEventListener('click', start);
+  againBtn.addEventListener('click', again);
+  copyBtn.addEventListener('click', function () {
+    copyText(current).then(showCopied);
+  });
+
+  window.addEventListener('pagehide', function () {
+    scanning = false;
+    if (stream) {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+    }
+  });
+
+  if (!window.isSecureContext) {
+    say('This page is not running over <code>https://</code>, so the browser will not ' +
+        'allow camera access. See the README for how to put it online.');
+  }
+})();
+</script>
+
+</body>
+</html>
